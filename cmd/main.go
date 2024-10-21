@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"github.com/luongdev/golock/redis"
+	"log"
 	"time"
 )
 
@@ -17,15 +19,26 @@ func main() {
 		go func() {
 			lock, err := locker.Lock("test")
 			if err != nil {
-				panic(err)
+				log.Printf("error: %v", err)
 			}
 
 			defer func() {
-				_ = lock.Unlock()
+				if lock != nil {
+					_ = lock.Unlock()
+				}
 			}()
 
 		}()
 	}
+
+	time.Sleep(time.Second * 2)
+
+	res, err := store.Get(context.Background(), "test")
+	if err != nil {
+		log.Printf("error: %v", err)
+	}
+
+	log.Printf("res: %v", res)
 
 	sigChan := make(chan struct{})
 	//time.AfterFunc(time.Second*5, func() {

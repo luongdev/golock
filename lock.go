@@ -14,8 +14,8 @@ type Locker interface {
 }
 
 type LockStore interface {
-	New(lock Lock) error
-	Get(name string) (Lock, error)
-	Del(name string) error
-	Clear() error
+	New(ctx context.Context, lock Lock) error
+	Get(ctx context.Context, name string) (Lock, error)
+	Del(ctx context.Context, name string) error
+	Clear(ctx context.Context) error
 }

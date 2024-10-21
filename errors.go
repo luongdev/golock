@@ -22,6 +22,18 @@ func (e *UnsupportedLockType) Error() string {
 	return "supported only lock type: " + e.lockType
 }
 
-func NewUnsupportedLockType(lockType string) *UnsupportedLockType {
+func NewErrUnsupportedLockType(lockType string) *UnsupportedLockType {
 	return &UnsupportedLockType{lockType: lockType}
+}
+
+type ErrLockNotFound struct {
+	name string
+}
+
+func (e *ErrLockNotFound) Error() string {
+	return "lock not found: " + e.name
+}
+
+func NewErrLockNotFound(name string) *ErrLockNotFound {
+	return &ErrLockNotFound{name: name}
 }

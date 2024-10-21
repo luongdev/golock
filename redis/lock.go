@@ -2,11 +2,20 @@ package redis
 
 import (
 	"context"
+	"encoding"
+	"encoding/json"
 	"github.com/luongdev/golock"
 	"time"
 )
 
 type LockOption func(*redisLock) error
+
+type jsonLock struct {
+	Name        string
+	LockTime    time.Time
+	LockAtLeast time.Duration
+	LockAtMost  time.Duration
+}
 
 type redisLock struct {
 	ctx    context.Context
@@ -20,8 +29,31 @@ type redisLock struct {
 	store *redisLockStore
 }
 
+func (r *redisLock) MarshalBinary() (data []byte, err error) {
+	s := jsonLock{
+		Name:        r.name,
+		LockTime:    r.lockTime,
+		LockAtLeast: r.lockAtLeast,
+	}
+	return json.Marshal(s)
+}
+
+func (r *redisLock) UnmarshalBinary(data []byte) error {
+	var s jsonLock
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	r.name = s.Name
+	r.lockTime = s.LockTime
+	r.lockAtLeast = s.LockAtLeast
+	r.lockAtMost = s.LockAtMost
+
+	return nil
+}
+
 func (r *redisLock) Unlock() error {
-	return r.store.Del(r.name)
+	return r.store.Del(r.ctx, r.name)
 }
 
 func (r *redisLock) getLockTimes() (time.Time, time.Time) {
@@ -36,12 +68,13 @@ func NewRedisLock(store *redisLockStore, opts ...LockOption) (golock.Lock, error
 		store:       store,
 	}
 
-	l.ctx, l.cancel = context.WithCancel(context.Background())
 	for _, opt := range opts {
 		if err := opt(l); err != nil {
 			return nil, err
 		}
 	}
+
+	l.ctx, l.cancel = context.WithTimeout(context.Background(), l.lockAtMost)
 
 	go func() {
 		for {
@@ -50,7 +83,7 @@ func NewRedisLock(store *redisLockStore, opts ...LockOption) (golock.Lock, error
 				return
 			default:
 				if time.Now().After(l.lockTime.Add(l.lockAtMost)) {
-					_ = l.store.Del(l.name)
+					_ = l.store.Del(l.ctx, l.name)
 					return
 				}
 				time.Sleep(l.lockAtLeast)
@@ -68,4 +101,13 @@ func WithName(name string) LockOption {
 	}
 }
 
+func WithLockAtMost(lockAtMost time.Duration) LockOption {
+	return func(l *redisLock) error {
+		l.lockAtMost = lockAtMost
+		return nil
+	}
+}
+
 var _ golock.Lock = (*redisLock)(nil)
+var _ encoding.BinaryUnmarshaler = (*redisLock)(nil)
+var _ encoding.BinaryMarshaler = (*redisLock)(nil)

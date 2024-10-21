@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"github.com/luongdev/golock"
-	"log"
 )
 
 type redisLocker struct {
@@ -19,9 +18,8 @@ func (r *redisLocker) LockCtx(ctx context.Context, name string) (golock.Lock, er
 		return nil, err
 	}
 
-	err = r.store.New(lock)
+	err = r.store.New(ctx, lock)
 	if err != nil {
-		log.Fatalf("failed to create lock: %v", err)
 		return nil, err
 	}
 
