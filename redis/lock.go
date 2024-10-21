@@ -4,11 +4,22 @@ import (
 	"context"
 	"encoding"
 	"encoding/json"
+	"fmt"
+	"github.com/google/uuid"
 	"github.com/luongdev/golock"
 	"time"
 )
 
-type LockOption func(*redisLock) error
+type lockOption func(*redisLock) error
+
+func (l lockOption) Apply(lock golock.Lock) error {
+	if rLock, ok := lock.(*redisLock); ok {
+		return l(rLock)
+	}
+	return nil
+}
+
+var _ golock.LockOption = (lockOption)(nil)
 
 type jsonLock struct {
 	Name        string
@@ -29,12 +40,15 @@ type redisLock struct {
 	store *redisLockStore
 }
 
+func (r *redisLock) String() string {
+	return fmt.Sprintf(
+		"redisLock{name=%s, lockTime=%v, lockAtLeast=%v, lockAtMost=%v}",
+		r.name, r.lockTime, r.lockAtLeast, r.lockAtMost,
+	)
+}
+
 func (r *redisLock) MarshalBinary() (data []byte, err error) {
-	s := jsonLock{
-		Name:        r.name,
-		LockTime:    r.lockTime,
-		LockAtLeast: r.lockAtLeast,
-	}
+	s := jsonLock{Name: r.name, LockTime: r.lockTime, LockAtLeast: r.lockAtLeast, LockAtMost: r.lockAtMost}
 	return json.Marshal(s)
 }
 
@@ -60,8 +74,14 @@ func (r *redisLock) getLockTimes() (time.Time, time.Time) {
 	return r.lockTime, r.lockTime.Add(r.lockAtMost)
 }
 
-func NewRedisLock(store *redisLockStore, opts ...LockOption) (golock.Lock, error) {
+func NewRedisLock(store *redisLockStore, opts ...lockOption) (golock.Lock, error) {
+	uid, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
+
 	l := &redisLock{
+		name:        uid.String(),
 		lockTime:    time.Now(),
 		lockAtLeast: time.Second * 2,
 		lockAtMost:  time.Second * 30,
@@ -69,12 +89,14 @@ func NewRedisLock(store *redisLockStore, opts ...LockOption) (golock.Lock, error
 	}
 
 	for _, opt := range opts {
-		if err := opt(l); err != nil {
+		if err = opt(l); err != nil {
 			return nil, err
 		}
 	}
 
-	l.ctx, l.cancel = context.WithTimeout(context.Background(), l.lockAtMost)
+	if l.ctx == nil {
+		l.ctx, l.cancel = context.WithTimeout(context.Background(), l.lockAtMost)
+	}
 
 	go func() {
 		for {
@@ -94,20 +116,42 @@ func NewRedisLock(store *redisLockStore, opts ...LockOption) (golock.Lock, error
 	return l, nil
 }
 
-func WithName(name string) LockOption {
-	return func(l *redisLock) error {
+func WithName(name string) golock.LockOption {
+	return lockOption(func(l *redisLock) error {
 		l.name = name
 		return nil
-	}
+	})
 }
 
-func WithLockAtMost(lockAtMost time.Duration) LockOption {
-	return func(l *redisLock) error {
+func WithContext(ctx context.Context) golock.LockOption {
+	return lockOption(func(l *redisLock) error {
+		l.ctx, l.cancel = context.WithCancel(ctx)
+		return nil
+	})
+}
+
+func WithLockTime(lockTime time.Time) golock.LockOption {
+	return lockOption(func(l *redisLock) error {
+		l.lockTime = lockTime
+		return nil
+	})
+}
+
+func WithLockAtLeast(lockAtLeast time.Duration) golock.LockOption {
+	return lockOption(func(l *redisLock) error {
+		l.lockAtLeast = lockAtLeast
+		return nil
+	})
+}
+
+func WithLockAtMost(lockAtMost time.Duration) golock.LockOption {
+	return lockOption(func(l *redisLock) error {
 		l.lockAtMost = lockAtMost
 		return nil
-	}
+	})
 }
 
 var _ golock.Lock = (*redisLock)(nil)
 var _ encoding.BinaryUnmarshaler = (*redisLock)(nil)
 var _ encoding.BinaryMarshaler = (*redisLock)(nil)
+var _ fmt.Stringer = (*redisLock)(nil)

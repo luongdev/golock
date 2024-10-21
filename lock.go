@@ -4,13 +4,17 @@ import (
 	"context"
 )
 
+type LockOption interface {
+	Apply(Lock) error
+}
+
 type Lock interface {
 	Unlock() error
 }
 
 type Locker interface {
-	LockCtx(ctx context.Context, name string) (Lock, error)
-	Lock(name string) (Lock, error)
+	LockCtx(ctx context.Context, opts ...LockOption) (Lock, error)
+	Lock(opts ...LockOption) (Lock, error)
 }
 
 type LockStore interface {

@@ -38,29 +38,38 @@ func (r *redisLockStore) Get(ctx context.Context, name string) (golock.Lock, err
 	tCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	cmd := r.rdb.TTL(tCtx, r.lockName(name))
+	l, err := NewRedisLock(r)
+	if err != nil {
+		return nil, err
+	}
+
+	rLock := l.(*redisLock)
+
+	cmd := r.rdb.Get(tCtx, r.lockName(name))
 	if cmd.Err() != nil {
 		return nil, cmd.Err()
 	}
 
-	if cmd.Val() == -2 {
+	if b, err := cmd.Bytes(); err != nil {
+		return nil, golock.NewErrLockNotFound(name)
+	} else if err := rLock.UnmarshalBinary(b); err != nil {
 		return nil, golock.NewErrLockNotFound(name)
 	}
 
-	ttl := cmd.Val()
-	if ttl == -1 {
-		r.rdb.Expire(tCtx, r.lockName(name), 30*time.Second)
-		ttl = 30 * time.Second
+	if time.Now().After(rLock.lockTime.Add(rLock.lockAtMost)) {
+		_ = r.Del(ctx, name)
+		return nil, golock.NewErrLockNotFound(name)
 	}
+	rLock.ctx, rLock.cancel = context.WithTimeout(ctx, rLock.lockAtMost)
 
-	return NewRedisLock(r, WithName(name), WithLockAtMost(ttl))
+	return l, nil
 }
 
 func (r *redisLockStore) Del(ctx context.Context, name string) error {
-	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	tCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	cmd := r.rdb.HDel(tCtx, r.lockKey, name)
+	cmd := r.rdb.ExpireAt(tCtx, r.lockName(name), time.Now())
 	if cmd.Err() != nil {
 		return cmd.Err()
 	}
@@ -84,14 +93,8 @@ func (r *redisLockStore) lockName(name string) string {
 	return fmt.Sprintf("%s:%s", r.lockKey, name)
 }
 
-func NewRedisLockStore(lockKey string) (golock.LockStore, error) {
-	s := &redisLockStore{lockKey: lockKey}
-
-	s.rdb = redis.NewClient(&redis.Options{
-		Addr:     "34.124.240.249:6979",
-		Password: "",
-		DB:       0,
-	})
+func NewRedisLockStore(lockKey string, rdb *redis.Client) (golock.LockStore, error) {
+	s := &redisLockStore{lockKey: lockKey, rdb: rdb}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

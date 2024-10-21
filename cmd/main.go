@@ -3,12 +3,17 @@ package main
 import (
 	"context"
 	"github.com/luongdev/golock/redis"
+	libredis "github.com/redis/go-redis/v9"
 	"log"
 	"time"
 )
 
 func main() {
-	store, err := redis.NewRedisLockStore("DefaultLockKey")
+	store, err := redis.NewRedisLockStore("DefaultLockKey", libredis.NewClient(&libredis.Options{
+		Addr:     "34.124.240.249:6979",
+		Password: "",
+		DB:       0,
+	}))
 	if err != nil {
 		panic(err)
 	}
@@ -17,28 +22,45 @@ func main() {
 
 	for i := 0; i < 3; i++ {
 		go func() {
-			lock, err := locker.Lock("test")
+			_, err = locker.Lock(
+				redis.WithName("test"),
+				redis.WithLockAtLeast(time.Second*5),
+				redis.WithLockAtMost(time.Second*120),
+			)
 			if err != nil {
 				log.Printf("error: %v", err)
 			}
 
-			defer func() {
-				if lock != nil {
-					_ = lock.Unlock()
-				}
-			}()
+			//defer func() {
+			//	if lock != nil {
+			//		_ = lock.Unlock()
+			//	}
+			//}()
 
 		}()
 	}
 
 	time.Sleep(time.Second * 2)
 
-	res, err := store.Get(context.Background(), "test")
+	lock, err := store.Get(context.Background(), "test")
 	if err != nil {
 		log.Printf("error: %v", err)
 	}
 
-	log.Printf("res: %v", res)
+	log.Printf("res: %v", lock)
+
+	if lock != nil {
+		_ = lock.Unlock()
+	}
+
+	time.Sleep(time.Second * 2)
+
+	lock, err = store.Get(context.Background(), "test")
+	if err != nil {
+		log.Printf("error: %v", err)
+	}
+
+	log.Printf("res: %v", lock)
 
 	sigChan := make(chan struct{})
 	//time.AfterFunc(time.Second*5, func() {
