@@ -81,9 +81,16 @@ func (r *redisLockStore) Clear(ctx context.Context) error {
 	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := r.rdb.Del(tCtx, r.lockKey)
+	cmd := r.rdb.Keys(tCtx, r.lockName("*"))
 	if cmd.Err() != nil {
 		return cmd.Err()
+	}
+
+	for _, key := range cmd.Val() {
+		delCmd := r.rdb.Del(tCtx, key)
+		if delCmd.Err() != nil {
+			return delCmd.Err()
+		}
 	}
 
 	return nil

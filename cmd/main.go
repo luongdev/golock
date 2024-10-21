@@ -10,7 +10,7 @@ import (
 
 func main() {
 	store, err := redis.NewRedisLockStore("DefaultLockKey", libredis.NewClient(&libredis.Options{
-		Addr:     "34.124.240.249:6979",
+		Addr:     "",
 		Password: "",
 		DB:       0,
 	}))
@@ -30,17 +30,8 @@ func main() {
 			if err != nil {
 				log.Printf("error: %v", err)
 			}
-
-			//defer func() {
-			//	if lock != nil {
-			//		_ = lock.Unlock()
-			//	}
-			//}()
-
 		}()
 	}
-
-	time.Sleep(time.Second * 2)
 
 	lock, err := store.Get(context.Background(), "test")
 	if err != nil {
@@ -53,8 +44,6 @@ func main() {
 		_ = lock.Unlock()
 	}
 
-	time.Sleep(time.Second * 2)
-
 	lock, err = store.Get(context.Background(), "test")
 	if err != nil {
 		log.Printf("error: %v", err)
@@ -63,11 +52,11 @@ func main() {
 	log.Printf("res: %v", lock)
 
 	sigChan := make(chan struct{})
-	//time.AfterFunc(time.Second*5, func() {
-	//	_ = lock.Unlock()
-	//
-	//	sigChan <- struct{}{}
-	//})
+
+	err = store.Clear(context.Background())
+	if err != nil {
+		log.Printf("error: %v", err)
+	}
 
 	for {
 		select {
@@ -77,5 +66,4 @@ func main() {
 			time.Sleep(time.Second)
 		}
 	}
-	//s.Clear()
 }
