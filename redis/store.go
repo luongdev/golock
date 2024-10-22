@@ -2,8 +2,10 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/luongdev/golock"
+	internal "github.com/luongdev/golock/internal"
 	"github.com/redis/go-redis/v9"
 	"time"
 )
@@ -16,16 +18,16 @@ type redisLockStore struct {
 
 func (r *redisLockStore) New(ctx context.Context, lock golock.Lock) error {
 	if rLock, ok := lock.(*redisLock); ok {
-		tCtx, cancel := context.WithTimeout(ctx, rLock.lockAtLeast)
+		tCtx, cancel := context.WithTimeout(ctx, rLock.LockAtLeast())
 		defer cancel()
 
-		setCmd := r.rdb.SetNX(tCtx, r.lockName(rLock.name), lock, rLock.lockAtMost)
+		setCmd := r.rdb.SetNX(tCtx, r.lockName(rLock.Name()), lock, rLock.LockAtMost())
 		if setCmd.Err() != nil {
 			return setCmd.Err()
 		}
 
 		if !setCmd.Val() {
-			return golock.NewErrLockAlreadyExists(rLock.name)
+			return golock.NewErrLockAlreadyExists(rLock.Name())
 		}
 
 		return nil
@@ -38,13 +40,7 @@ func (r *redisLockStore) Get(ctx context.Context, name string) (golock.Lock, err
 	tCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	l, err := NewRedisLock(r)
-	if err != nil {
-		return nil, err
-	}
-
-	rLock := l.(*redisLock)
-
+	rLock := &redisLock{}
 	cmd := r.rdb.Get(tCtx, r.lockName(name))
 	if cmd.Err() != nil {
 		return nil, cmd.Err()
@@ -52,17 +48,33 @@ func (r *redisLockStore) Get(ctx context.Context, name string) (golock.Lock, err
 
 	if b, err := cmd.Bytes(); err != nil {
 		return nil, golock.NewErrLockNotFound(name)
-	} else if err := rLock.UnmarshalBinary(b); err != nil {
-		return nil, golock.NewErrLockNotFound(name)
-	}
+	} else {
+		var j redisJson
+		if err = json.Unmarshal(b, &j); err != nil {
+			return nil, err
+		}
 
-	if time.Now().After(rLock.lockTime.Add(rLock.lockAtMost)) {
-		_ = r.Del(ctx, name)
-		return nil, golock.NewErrLockNotFound(name)
-	}
-	rLock.ctx, rLock.cancel = context.WithTimeout(ctx, rLock.lockAtMost)
+		sLock, err := internal.NewSimpleLock(
+			WithName(j.Name),
+			WithLockTime(j.LockTime),
+			WithLockAtLeast(j.LockAtLeast),
+			WithLockAtMost(j.LockAtMost),
+			WithLockStore(r),
+			WithContext(ctx),
+		)
+		if err != nil {
+			return nil, err
+		}
 
-	return l, nil
+		rLock.SimpleLock = sLock
+
+		if time.Now().After(rLock.LockTime().Add(rLock.LockAtMost())) {
+			_ = r.Del(ctx, name)
+			return nil, golock.NewErrLockNotFound(name)
+		}
+
+		return rLock, nil
+	}
 }
 
 func (r *redisLockStore) Del(ctx context.Context, name string) error {

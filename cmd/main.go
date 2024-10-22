@@ -10,7 +10,7 @@ import (
 
 func main() {
 	store, err := redis.NewRedisLockStore("DefaultLockKey", libredis.NewClient(&libredis.Options{
-		Addr:     "",
+		Addr:     "34.124.240.249:6979",
 		Password: "",
 		DB:       0,
 	}))

@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"github.com/luongdev/golock"
+	internal "github.com/luongdev/golock/internal"
 )
 
 type redisLocker struct {
@@ -13,13 +14,8 @@ type redisLocker struct {
 }
 
 func (r *redisLocker) LockCtx(ctx context.Context, opts ...golock.LockOption) (golock.Lock, error) {
-	rOpts := make([]lockOption, 0, len(opts))
-	for _, opt := range opts {
-		if o, ok := opt.(lockOption); ok {
-			rOpts = append(rOpts, o)
-		}
-	}
-	lock, err := NewRedisLock(r.store, rOpts...)
+	opts = append(opts, internal.WithContext(ctx), internal.WithLockStore(r.store))
+	lock, err := NewRedisLock(opts...)
 	if err != nil {
 		return nil, err
 	}
