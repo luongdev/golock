@@ -61,13 +61,23 @@ func (s *mongoLockStore) Get(ctx context.Context, name string) (golock.Lock, err
 }
 
 func (s *mongoLockStore) Del(ctx context.Context, name string) error {
+	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
-	return nil
+	col := s.db.Collection("Locker")
+	_, err := col.DeleteOne(tCtx, bson.M{"_id": name})
+
+	return err
 }
 
 func (s *mongoLockStore) Clear(ctx context.Context) error {
+	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
-	return nil
+	col := s.db.Collection("Locker")
+	_, err := col.DeleteMany(tCtx, bson.M{})
+
+	return err
 }
 
 func NewMongoLockStore(c *mongo.Client, dbName string) (golock.LockStore, error) {
