@@ -8,7 +8,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/luongdev/golock"
-	internal "github.com/luongdev/golock/internal"
 	_ "github.com/microsoft/go-mssqldb"
 	"log"
 	"time"
@@ -83,7 +82,7 @@ func (s *rdbLockStore) Get(ctx context.Context, name string) (golock.Lock, error
 		lockAtMost = time.Second * 30
 	}
 
-	sLock, err := internal.NewSimpleLock(
+	return NewRdbLock(
 		WithName(rLock.Name),
 		WithLockTime(time.Unix(rLock.LockTime, 0)),
 		WithLockAtLeast(lockAtLeast),
@@ -91,13 +90,6 @@ func (s *rdbLockStore) Get(ctx context.Context, name string) (golock.Lock, error
 		WithLockStore(s),
 		WithContext(ctx),
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	dbLock := &rdbLock{SimpleLock: sLock}
-
-	return dbLock, nil
 }
 
 func (s *rdbLockStore) Del(ctx context.Context, name string) error {
@@ -116,7 +108,7 @@ func (s *rdbLockStore) Clear(ctx context.Context) error {
 	return err
 }
 
-func NewSqlxLockStore(db *sqlx.DB) (golock.LockStore, error) {
+func NewRdbLockStore(db *sqlx.DB) (golock.LockStore, error) {
 	_, err := db.Exec(schema)
 	if err != nil {
 		log.Printf("warn: %v", err)

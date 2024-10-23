@@ -2,70 +2,48 @@ package main
 
 import (
 	"context"
-	libsqlx "github.com/jmoiron/sqlx"
-	"github.com/luongdev/golock/rdb"
-	"github.com/luongdev/golock/redis"
+	rdb "github.com/luongdev/golock/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"log"
 	"time"
 )
 
 func main() {
 
-	db, err := libsqlx.Connect("postgres", "user=postgres password=Default#Postgres@6699 dbname=freeswitch host=192.168.13.137 port=15432 sslmode=disable")
+	c, err := mongo.Connect(options.Client().ApplyURI("mongodb://root:Abcd54321@192.168.13.54:27017/test?authSource=admin"))
 	if err != nil {
-		log.Fatalln(err)
-	}
-	store, err := rdb.NewSqlxLockStore(db)
-	if err != nil {
-		log.Fatalln(err)
+		panic(err)
 	}
 
-	//store, err := redis.NewRedisLockStore("DefaultLockKey", libredis.NewClient(&libredis.Options{}))
+	store, err := rdb.NewMongoLockStore(c, "test")
+	if err != nil {
+		panic(err)
+	}
+
+	//log.Printf("MongoDB lock store created %v\n", store)
+	//
+	//mLock, err := rdb.NewMongoLock(rdb.WithName("test"), rdb.WithLockStore(store))
 	//if err != nil {
 	//	panic(err)
 	//}
-	//
-
-	locker := rdb.NewRdbLocker(store)
-
-	for i := 0; i < 3; i++ {
-		go func() {
-			_, err = locker.Lock(
-				redis.WithName("test"),
-				redis.WithLockAtLeast(time.Second*5),
-				redis.WithLockAtMost(time.Second*120),
-			)
-			if err != nil {
-				log.Printf("error: %v", err)
-			}
-		}()
-	}
-
-	lock, err := store.Get(context.Background(), "test")
-	if err != nil {
-		log.Printf("error: %v", err)
-	}
-
-	log.Printf("res: %v", lock)
-
-	if lock != nil {
-		_ = lock.Unlock()
-	}
-
-	lock, err = store.Get(context.Background(), "test")
-	if err != nil {
-		log.Printf("error: %v", err)
-	}
-
-	log.Printf("res: %v", lock)
-
-	sigChan := make(chan struct{})
-
-	//err = store.Clear(context.Background())
-	//if err != nil {
-	//	log.Printf("error: %v", err)
+	//for i := 0; i < 3; i++ {
+	//	go func() {
+	//		err = store.New(context.Background(), mLock)
+	//		if err != nil {
+	//			return
+	//		}
+	//	}()
 	//}
 
+	mLock, err := store.Get(context.Background(), "test")
+	if err != nil {
+		panic(err)
+	}
+
+	log.Printf("MongoDB lock created %v\n", mLock)
+
+	sigChan := make(chan struct{})
 	for {
 		select {
 		case <-sigChan:
