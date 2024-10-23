@@ -1,4 +1,4 @@
-package rdb
+package mongo
 
 import (
 	"github.com/luongdev/golock"
