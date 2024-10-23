@@ -1,4 +1,4 @@
-package redis
+package rdb
 
 import (
 	"context"
@@ -11,16 +11,16 @@ func WithName(name string) golock.LockOption {
 	return internal.WithName(name)
 }
 
-func WithLockBy(s string) golock.LockOption {
-	return internal.WithLockBy(s)
-}
-
 func WithLockAtLeast(d time.Duration) golock.LockOption {
 	return internal.WithLockAtLeast(d)
 }
 
 func WithLockAtMost(d time.Duration) golock.LockOption {
 	return internal.WithLockAtMost(d)
+}
+
+func WithLockBy(s string) golock.LockOption {
+	return internal.WithLockBy(s)
 }
 
 func WithLockTime(t time.Time) golock.LockOption {

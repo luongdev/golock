@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/luongdev/golock"
+	"os"
 	"time"
 )
 
@@ -21,6 +22,7 @@ var _ golock.LockOption = (SimpleLockOption)(nil)
 
 type SimpleLock struct {
 	name        string
+	lockBy      string
 	lockTime    time.Time
 	lockAtLeast time.Duration
 	lockAtMost  time.Duration
@@ -32,6 +34,10 @@ type SimpleLock struct {
 
 func (s *SimpleLock) Name() string {
 	return s.name
+}
+
+func (s *SimpleLock) LockBy() string {
+	return s.lockBy
 }
 
 func (s *SimpleLock) LockTime() time.Time {
@@ -60,11 +66,17 @@ func NewSimpleLock(opts ...golock.LockOption) (*SimpleLock, error) {
 		return nil, err
 	}
 
+	hostName, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+
 	l := &SimpleLock{
 		name:        uid.String(),
 		lockTime:    time.Now(),
 		lockAtLeast: 2 * time.Second,
 		lockAtMost:  15 * time.Second,
+		lockBy:      hostName,
 	}
 
 	for _, opt := range opts {
@@ -117,6 +129,13 @@ var _ golock.Lock = (*SimpleLock)(nil)
 func WithName(name string) golock.LockOption {
 	return SimpleLockOption(func(l *SimpleLock) error {
 		l.name = name
+		return nil
+	})
+}
+
+func WithLockBy(lockBy string) golock.LockOption {
+	return SimpleLockOption(func(l *SimpleLock) error {
+		l.lockBy = lockBy
 		return nil
 	})
 }
